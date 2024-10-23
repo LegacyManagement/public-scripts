@@ -10,10 +10,9 @@
 #   - <username>.pem: The user's certificate.
 #   - <username>.p12: A PKCS#12 package containing the user's key and certificate, encrypted with a passphrase.
 
-echo "Welcome to the SSL Key Pair Generator Script."
+echo "Welcome to the SSL Key Pair Generator Script"
 echo ""
-echo "This script will help you create SSL certificates for secure access to private resources using mutual TLS (mTLS) authentication."
-echo "You will be prompted for an Organization Name and a Username."
+echo "This script will help you create SSL certificates for secure access to private resources using mutual TLS (mTLS) authentication"
 echo ""
 
 # Prompt for the Organization Name
@@ -29,17 +28,6 @@ while [[ -z "$USER_NAME" ]]; do
     echo "Username cannot be empty. Please try again."
     read -p "Please enter your Username (e.g., the first part of your email address): " USER_NAME < /dev/tty
 done
-
-# Confirm the inputs
-echo ""
-echo "Organization Name: $ORG_NAME"
-echo "Username: $USER_NAME"
-echo ""
-read -p "Are these details correct? (y/n): " CONFIRM < /dev/tty
-if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
-    echo "Exiting script. Please run again with correct details."
-    exit 1
-fi
 
 # Define output file names
 CERT_FILE="${USER_NAME}-ca.crt"
@@ -63,7 +51,7 @@ if [[ ${#EXISTING_FILES[@]} -gt 0 ]]; then
         echo " - $FILE"
     done
     echo ""
-    echo "Please remove the existing file(s), or run the script in a new empty directory."
+    echo "Please remove the existing file(s), or run the script in a new empty directory"
     exit 1
 fi
 
@@ -106,23 +94,23 @@ echo "Now, you will be prompted to create a passphrase to encrypt your PKCS#12 p
 echo "Please remember this passphrase, as you will need it to import the certificate into your browser or applications."
 echo ""
 
-# Read passphrase securely
-read -s -p "Enter passphrase: " PASS_PHRASE < /dev/tty
-echo ""
-read -s -p "Confirm passphrase: " PASS_PHRASE_CONFIRM < /dev/tty
-echo ""
+# # Read passphrase securely
+# read -s -p "Enter passphrase: " PASS_PHRASE < /dev/tty
+# echo ""
+# read -s -p "Confirm passphrase: " PASS_PHRASE_CONFIRM < /dev/tty
+# echo ""
 
-# Check if passphrases match
-if [[ "$PASS_PHRASE" != "$PASS_PHRASE_CONFIRM" ]]; then
-    echo "Passphrases do not match. Please run the script again."
-    rm ca.key user.key user.csr user.crt ca.srl "${EXTENSIONS}"
-    exit 1
-fi
+# # Check if passphrases match
+# if [[ "$PASS_PHRASE" != "$PASS_PHRASE_CONFIRM" ]]; then
+#     echo "Passphrases do not match. Please run the script again."
+#     rm ca.key user.key user.csr user.crt "${EXTENSIONS}"
+#     exit 1
+# fi
 
-openssl pkcs12 -export -out "${P12_FILE}" -inkey user.key -in user.crt -certfile "${CERT_FILE}" -passout pass:"${PASS_PHRASE}"
+openssl pkcs12 -export -out "${P12_FILE}" -inkey user.key -in user.crt -certfile "${CERT_FILE}" < /dev/tty
 
 # Step 6: Clean up temporary files
-rm ca.key user.key user.csr user.crt ca.srl "${EXTENSIONS}"
+rm ca.key user.key user.csr user.crt "${EXTENSIONS}"
 
 echo ""
 echo "Certificate generation complete!"
@@ -133,6 +121,4 @@ echo "2. ${USER_CERT_FILE} - Your user certificate in PEM format."
 echo "3. ${P12_FILE} - A PKCS#12 package containing your key and certificate (encrypted with your passphrase)."
 echo ""
 echo "You can now use these certificates for mTLS authentication to access private resources."
-echo "Please import the '${P12_FILE}' file into your browser or application, using the passphrase you provided."
-echo ""
-echo "Thank you for using the SSL Key Pair Generator Script."
+echo "Please import the '${P12_FILE}' file into your browser, using the passphrase you provided."
