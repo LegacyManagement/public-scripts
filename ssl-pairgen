@@ -94,7 +94,10 @@ echo "Now, you will be prompted to create a passphrase to encrypt your PKCS#12 p
 echo "Please remember this passphrase, as you will need it to import the certificate into your browser or applications."
 echo ""
 
-openssl pkcs12 -export -out "${P12_FILE}" -inkey user.key -in user.crt -certfile "${CERT_FILE}" < /dev/tty
+openssl pkcs12 -export -out "${P12_FILE}" \
+  -inkey user.key -in user.crt -certfile "${CERT_FILE}" \
+  -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES \
+  -name "${USER_NAME}" -macalg sha1 < /dev/tty
 
 # Step 6: Clean up temporary files
 rm ca.key user.key user.csr user.crt "${EXTENSIONS}"
