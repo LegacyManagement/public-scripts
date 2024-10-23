@@ -1,0 +1,126 @@
+#!/bin/bash
+
+# This script generates an SSL key pair for authentication to private resources protected by browser certificates (mutual TLS authentication).
+
+# It will:
+# - Create a temporary Certificate Authority (CA) certificate.
+# - Generate a user certificate signed by this CA.
+# - Output the following files:
+#   - <username>-ca.crt: The CA certificate.
+#   - <username>.pem: The user's certificate.
+#   - <username>.p12: A PKCS#12 package containing the user's key and certificate, encrypted with a passphrase.
+
+echo "Welcome to the SSL Key Pair Generator Script."
+echo ""
+echo "This script will help you create SSL certificates for secure access to private resources using mutual TLS (mTLS) authentication."
+echo "You will be prompted for an Organization Name and a Username."
+echo ""
+
+# Prompt for the Organization Name
+read -p "Please enter your Organization Name (e.g., the name of your company): " ORG_NAME
+while [[ -z "$ORG_NAME" ]]; do
+    echo "Organization Name cannot be empty. Please try again."
+    read -p "Please enter your Organization Name (e.g., the name of your company): " ORG_NAME
+done
+
+# Prompt for the Username
+read -p "Please enter your Username (e.g., the first part of your email address): " USER_NAME
+while [[ -z "$USER_NAME" ]]; do
+    echo "Username cannot be empty. Please try again."
+    read -p "Please enter your Username (e.g., the first part of your email address): " USER_NAME
+done
+
+# Confirm the inputs
+echo ""
+echo "Organization Name: $ORG_NAME"
+echo "Username: $USER_NAME"
+echo ""
+read -p "Are these details correct? (y/n): " CONFIRM
+if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
+    echo "Exiting script. Please run again with correct details."
+    exit 1
+fi
+
+# Define output file names
+CERT_FILE="${USER_NAME}-ca.crt"
+USER_CERT_FILE="${USER_NAME}.pem"
+P12_FILE="${USER_NAME}.p12"
+
+# Define an array of output files
+OUTPUT_FILES=("${CERT_FILE}" "${USER_CERT_FILE}" "${P12_FILE}")
+
+# Initialize a list to store names of existing files
+EXISTING_FILES=()
+
+# Loop through each file and check if it exists
+for FILE in "${OUTPUT_FILES[@]}"; do
+    if [[ -e "$FILE" ]]; then
+        EXISTING_FILES+=("$FILE")
+    fi
+done
+
+# If any files exist, notify the user and exit
+if [[ ${#EXISTING_FILES[@]} -gt 0 ]]; then
+    echo ""
+    echo "Error: The following file(s) already exist in the current directory:"
+    for FILE in "${EXISTING_FILES[@]}"; do
+        echo " - $FILE"
+    done
+    echo ""
+    echo "Please remove the existing file(s), or run the script in a new empty directory."
+    exit 1
+fi
+
+echo ""
+echo "Generating CA and user keys and certificates..."
+echo ""
+
+# Step 1: Generate CA key and self-signed certificate
+openssl genrsa -out ca.key 3072
+openssl req -x509 -new -nodes -key ca.key -sha256 -days 366 \
+    -subj "/O=${ORG_NAME}/CN=${USER_NAME}-privateCA" \
+    -out "${CERT_FILE}"
+
+# Step 2: Generate user key and certificate signing request (CSR)
+openssl genrsa -out user.key 2048
+openssl req -new -key user.key \
+    -subj "/O=${ORG_NAME}/CN=${USER_NAME}" \
+    -out user.csr
+
+# Create a configuration file for extensions
+EXTENSIONS=$(mktemp /tmp/ssl-extensions.XXXXXX)
+cat > "${EXTENSIONS}" <<EOF
+extendedKeyUsage = clientAuth
+subjectAltName = @alt_names
+
+[alt_names]
+IP.1 = 127.0.0.1
+EOF
+
+# Step 3: Generate user certificate signed by the CA
+openssl x509 -req -in user.csr -CA "${CERT_FILE}" -CAkey ca.key -CAcreateserial \
+    -out user.crt -days 365 -sha256 -extfile "${EXTENSIONS}"
+
+# Step 4: Convert user certificate to PEM format (without private key)
+cp user.crt "${USER_CERT_FILE}"
+
+# Step 5: Create PKCS#12 package with passphrase
+echo ""
+echo "Now, you will be prompted to create a passphrase to encrypt your PKCS#12 package."
+echo "Please remember this passphrase, as you will need it to import the certificate into your browser or applications."
+echo ""
+openssl pkcs12 -export -out "${P12_FILE}" -inkey user.key -in user.crt -certfile "${CERT_FILE}"
+
+# Step 6: Clean up temporary files
+rm ca.key user.key user.csr user.crt ca.srl "${EXTENSIONS}"
+
+echo ""
+echo "Certificate generation complete!"
+echo ""
+echo "The following files have been created in the current directory:"
+echo "1. ${CERT_FILE} - Your private CA certificate."
+echo "2. ${USER_CERT_FILE} - Your user certificate in PEM format."
+echo "3. ${P12_FILE} - A PKCS#12 package containing your key and certificate (encrypted with your passphrase)."
+echo ""
+echo "You can now use these certificates for mTLS authentication to access private resources."
+echo "Please import the '${P12_FILE}' file into your browser, using the passphrase you provided."
