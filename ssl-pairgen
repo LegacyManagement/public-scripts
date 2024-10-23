@@ -17,17 +17,17 @@ echo "You will be prompted for an Organization Name and a Username."
 echo ""
 
 # Prompt for the Organization Name
-read -p "Please enter your Organization Name (e.g., the name of your company): " ORG_NAME
+read -p "Please enter your Organization Name (e.g., the name of your company): " ORG_NAME < /dev/tty
 while [[ -z "$ORG_NAME" ]]; do
     echo "Organization Name cannot be empty. Please try again."
-    read -p "Please enter your Organization Name (e.g., the name of your company): " ORG_NAME
+    read -p "Please enter your Organization Name (e.g., the name of your company): " ORG_NAME < /dev/tty
 done
 
 # Prompt for the Username
-read -p "Please enter your Username (e.g., the first part of your email address): " USER_NAME
+read -p "Please enter your Username (e.g., the first part of your email address): " USER_NAME < /dev/tty
 while [[ -z "$USER_NAME" ]]; do
     echo "Username cannot be empty. Please try again."
-    read -p "Please enter your Username (e.g., the first part of your email address): " USER_NAME
+    read -p "Please enter your Username (e.g., the first part of your email address): " USER_NAME < /dev/tty
 done
 
 # Confirm the inputs
@@ -35,7 +35,7 @@ echo ""
 echo "Organization Name: $ORG_NAME"
 echo "Username: $USER_NAME"
 echo ""
-read -p "Are these details correct? (y/n): " CONFIRM
+read -p "Are these details correct? (y/n): " CONFIRM < /dev/tty
 if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
     echo "Exiting script. Please run again with correct details."
     exit 1
@@ -46,20 +46,16 @@ CERT_FILE="${USER_NAME}-ca.crt"
 USER_CERT_FILE="${USER_NAME}.pem"
 P12_FILE="${USER_NAME}.p12"
 
-# Define an array of output files
+# Check if output files already exist
 OUTPUT_FILES=("${CERT_FILE}" "${USER_CERT_FILE}" "${P12_FILE}")
-
-# Initialize a list to store names of existing files
 EXISTING_FILES=()
 
-# Loop through each file and check if it exists
 for FILE in "${OUTPUT_FILES[@]}"; do
     if [[ -e "$FILE" ]]; then
         EXISTING_FILES+=("$FILE")
     fi
 done
 
-# If any files exist, notify the user and exit
 if [[ ${#EXISTING_FILES[@]} -gt 0 ]]; then
     echo ""
     echo "Error: The following file(s) already exist in the current directory:"
@@ -109,7 +105,21 @@ echo ""
 echo "Now, you will be prompted to create a passphrase to encrypt your PKCS#12 package."
 echo "Please remember this passphrase, as you will need it to import the certificate into your browser or applications."
 echo ""
-openssl pkcs12 -export -out "${P12_FILE}" -inkey user.key -in user.crt -certfile "${CERT_FILE}"
+
+# Read passphrase securely
+read -s -p "Enter passphrase: " PASS_PHRASE < /dev/tty
+echo ""
+read -s -p "Confirm passphrase: " PASS_PHRASE_CONFIRM < /dev/tty
+echo ""
+
+# Check if passphrases match
+if [[ "$PASS_PHRASE" != "$PASS_PHRASE_CONFIRM" ]]; then
+    echo "Passphrases do not match. Please run the script again."
+    rm ca.key user.key user.csr user.crt ca.srl "${EXTENSIONS}"
+    exit 1
+fi
+
+openssl pkcs12 -export -out "${P12_FILE}" -inkey user.key -in user.crt -certfile "${CERT_FILE}" -passout pass:"${PASS_PHRASE}"
 
 # Step 6: Clean up temporary files
 rm ca.key user.key user.csr user.crt ca.srl "${EXTENSIONS}"
@@ -123,4 +133,6 @@ echo "2. ${USER_CERT_FILE} - Your user certificate in PEM format."
 echo "3. ${P12_FILE} - A PKCS#12 package containing your key and certificate (encrypted with your passphrase)."
 echo ""
 echo "You can now use these certificates for mTLS authentication to access private resources."
-echo "Please import the '${P12_FILE}' file into your browser, using the passphrase you provided."
+echo "Please import the '${P12_FILE}' file into your browser or application, using the passphrase you provided."
+echo ""
+echo "Thank you for using the SSL Key Pair Generator Script."
