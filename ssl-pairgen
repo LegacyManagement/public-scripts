@@ -94,19 +94,6 @@ echo "Now, you will be prompted to create a passphrase to encrypt your PKCS#12 p
 echo "Please remember this passphrase, as you will need it to import the certificate into your browser or applications."
 echo ""
 
-# # Read passphrase securely
-# read -s -p "Enter passphrase: " PASS_PHRASE < /dev/tty
-# echo ""
-# read -s -p "Confirm passphrase: " PASS_PHRASE_CONFIRM < /dev/tty
-# echo ""
-
-# # Check if passphrases match
-# if [[ "$PASS_PHRASE" != "$PASS_PHRASE_CONFIRM" ]]; then
-#     echo "Passphrases do not match. Please run the script again."
-#     rm ca.key user.key user.csr user.crt "${EXTENSIONS}"
-#     exit 1
-# fi
-
 openssl pkcs12 -export -out "${P12_FILE}" -inkey user.key -in user.crt -certfile "${CERT_FILE}" < /dev/tty
 
 # Step 6: Clean up temporary files
