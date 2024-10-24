@@ -100,8 +100,8 @@ openssl pkcs12 -export -out "${P12_FILE}" \
   -inkey user.key -in user.crt -certfile "${CERT_FILE}" \
   -name "${USER_NAME}" \
   -macalg sha256 \
-  -certpbe AES-256-CBC \
-  -keypbe AES-256-CBC \
+  -certpbe PBE-SHA1-3DES \
+  -keypbe PBE-SHA1-3DES \
   -maciter \
   < /dev/tty
 
