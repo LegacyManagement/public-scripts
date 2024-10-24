@@ -96,8 +96,13 @@ echo ""
 
 openssl pkcs12 -export -out "${P12_FILE}" \
   -inkey user.key -in user.crt -certfile "${CERT_FILE}" \
-  -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES \
-  -name "${USER_NAME}" -macalg sha1 < /dev/tty
+  -name "${USER_NAME}" \
+  -macalg sha256 \
+  -iter 2048 \
+  -certpbe AES-256-CBC \
+  -keypbe AES-256-CBC \
+  -maciter \
+  < /dev/tty
 
 # Step 6: Clean up temporary files
 rm ca.key user.key user.csr user.crt "${EXTENSIONS}"
