@@ -28,6 +28,8 @@ while [[ -z "$USER_NAME" ]]; do
     echo "Username cannot be empty. Please try again."
     read -p "Please enter your Username (e.g., the first part of your email address): " USER_NAME < /dev/tty
 done
+# Force lower case
+USER_NAME=$(echo "$USER_NAME" | tr A-Z a-z)
 
 # Define output file names
 CERT_FILE="${USER_NAME}-ca.crt"
@@ -98,7 +100,6 @@ openssl pkcs12 -export -out "${P12_FILE}" \
   -inkey user.key -in user.crt -certfile "${CERT_FILE}" \
   -name "${USER_NAME}" \
   -macalg sha256 \
-  -iter 2048 \
   -certpbe AES-256-CBC \
   -keypbe AES-256-CBC \
   -maciter \
