@@ -63,7 +63,7 @@ echo ""
 
 # Step 1: Generate CA key and self-signed certificate
 openssl genrsa -out ca.key 3072
-openssl req -x509 -new -nodes -key ca.key -sha256 -days 366 \
+openssl req -x509 -new -nodes -key ca.key -sha256 -days 365 \
     -subj "/O=${ORG_NAME}/CN=${USER_NAME}-privateCA" \
     -out "${CERT_FILE}"
 
