@@ -5,7 +5,7 @@
 # It will:
 # - Create a temporary Certificate Authority (CA) certificate.
 # - Generate a user certificate signed by this CA.
-# - Output the following files in $HOME/sslpair:
+# - Output the following files in the determined sslpair directory:
 #   - <username>-ca.crt: The CA certificate.
 #   - <username>.pem: The user's certificate.
 #   - <username>.p12: A PKCS#12 package containing the user's key and certificate, encrypted with a passphrase.
@@ -42,13 +42,28 @@ function handle_existing_directory {
     done
 }
 
-# Define the destination directory
-SSLPAIR_DIR="$HOME/sslpair"
+# Function to determine the destination directory based on existing paths
+function determine_sslpair_dir {
+    if [ -d "/app/app" ]; then
+        SSLPAIR_DIR="/app/certs/sslpair"
+    elif [ -d "/home/welld/workspace" ]; then
+        SSLPAIR_DIR="/home/welld/workspace/certs/sslpair"
+    else
+        SSLPAIR_DIR="$HOME/sslpair"
+    fi
+}
+
+# Determine the destination directory
+determine_sslpair_dir
 
 # Check if the destination directory exists
 if [ -d "$SSLPAIR_DIR" ]; then
     handle_existing_directory "$SSLPAIR_DIR"
 fi
+
+# Ensure the parent directory exists
+PARENT_DIR=$(dirname "$SSLPAIR_DIR")
+mkdir -p "$PARENT_DIR"
 
 # Create the destination directory
 mkdir -p "$SSLPAIR_DIR"
@@ -77,7 +92,7 @@ while [[ -z "$USER_NAME" ]]; do
     read -p "Please enter your Username (e.g., the first part of your email address): " USER_NAME < /dev/tty
 done
 # Force lower case
-USER_NAME=$(echo "$USER_NAME" | tr A-Z a-z)
+USER_NAME=$(echo "$USER_NAME" | tr 'A-Z' 'a-z')
 
 # Define output file names
 CERT_FILE="${USER_NAME}-ca.crt"
