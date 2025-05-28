@@ -135,6 +135,7 @@ cp user.crt "${USER_CERT_FILE}"
 # Step 5: Create PKCS#12 package with passphrase
 echo ""
 echo "Now, you will be prompted to create a passphrase to encrypt your PKCS#12 package."
+echo "(NOTE: you won't see the characters you type, so type carefully!)"
 echo "Please remember this passphrase, as you will need it to import the certificate into your browser or applications."
 echo ""
 
