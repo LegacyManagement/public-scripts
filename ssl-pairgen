@@ -24,7 +24,7 @@ function handle_existing_directory {
     local dir="$1"
     echo "Directory '$dir' already exists."
     while true; do
-        read -p "Do you want to remove it and continue? (yes/no): " yn
+        read -p "Do you want to remove it and continue? (yes/no): " yn < /dev/tty
         case $yn in
             [Yy][Ee][Ss]|[Yy])
                 rm -rf "$dir"
