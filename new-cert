@@ -1,0 +1,189 @@
+#!/bin/bash
+
+# new-cert.sh: Combined script to generate an encrypted private key, CSR, accept a signed certificate, and create a PKCS#12 file.
+# Modified to support: curl ... | /bin/bash
+
+# Exit immediately if a command exits with a non-zero status
+set -e
+
+# Function to print error message and exit
+function error_exit {
+    echo "Error: $1" >&2
+    exit 1
+}
+
+# Function to securely read passphrase and set up file descriptors
+function setup_passphrase_fds {
+    # Prompt the user for the passphrase without echoing - redirect from /dev/tty
+    read -s -p "Enter a passphrase for encrypting your private key and '*.p12' file: " PASSPHRASE < /dev/tty
+    echo
+    read -s -p "Re-enter the passphrase to verify: " PASSPHRASE_VERIFY < /dev/tty
+    echo
+
+    # Check if the passphrases match
+    if [[ "$PASSPHRASE" != "$PASSPHRASE_VERIFY" ]]; then
+        echo "Passphrases do not match. Exiting."
+        exit 1
+    fi
+
+    # Open separate file descriptors for each OpenSSL command
+    exec 3<<<"$PASSPHRASE"  # For genrsa -passout
+    exec 4<<<"$PASSPHRASE"  # For req -passin
+    exec 5<<<"$PASSPHRASE"  # For pkcs12 -passin
+    exec 6<<<"$PASSPHRASE"  # For pkcs12 -passout
+
+    # Clean up the verification variable
+    unset PASSPHRASE_VERIFY
+}
+
+# Function to clean up file descriptors
+function cleanup {
+    exec 3<&-
+    exec 4<&-
+    exec 5<&-
+    exec 6<&-
+}
+trap cleanup EXIT
+
+# --- Argument / Prompt Handling ---
+
+CA_ENV="$1"
+CA_TYPE="$2"
+
+# Prompt for CA_ENV if missing or invalid
+if [[ "$CA_ENV" != "qa" ]] && [[ "$CA_ENV" != "prod" ]]; then
+    read -p "Enter Environment (qa|prod): " CA_ENV < /dev/tty
+fi
+
+# Prompt for CA_TYPE if missing or invalid
+if [[ "$CA_TYPE" != "high" ]] && [[ "$CA_TYPE" != "low" ]]; then
+    read -p "Enter Type (high|low): " CA_TYPE < /dev/tty
+fi
+
+# Final Validation
+if [[ "$CA_ENV" != "qa" ]] && [[ "$CA_ENV" != "prod" ]]; then
+    error_exit "Invalid environment. Must be 'qa' or 'prod'."
+fi
+if [[ "$CA_TYPE" != "high" ]] && [[ "$CA_TYPE" != "low" ]]; then
+    error_exit "Invalid type. Must be 'high' or 'low'."
+fi
+
+BOT_ALIAS=";"
+if [[ $CA_ENV = "prod" ]]; then
+    BOT_ALIAS="!"
+fi
+
+# --- Path and Directory Setup ---
+
+DIR_NAME="${CA_ENV}-${CA_TYPE}-certs"
+
+if [ -d "/app/app" ]; then
+    PARENT_DIR="/app/certs"
+else
+    PARENT_DIR="$HOME/workspace/certs"
+fi
+
+DEST_DIR="${PARENT_DIR}/${DIR_NAME}"
+
+if [ -d "$DEST_DIR" ]; then
+    echo "Directory '$DEST_DIR' already exists."
+    while true; do
+        read -p "Do you want to remove it and continue? (yes/no): " yn < /dev/tty
+        case $yn in
+            [Yy][Ee][Ss]|[Yy])
+                rm -rf "$DEST_DIR"
+                echo "Removed existing directory '$DEST_DIR'."
+                break
+                ;;
+            [Nn][Oo]|[Nn])
+                echo "Exiting without making changes."
+                exit 0
+                ;;
+            *)
+                echo "Please answer yes or no."
+                ;;
+        esac
+    done
+fi
+
+mkdir -p "$DEST_DIR"
+cd "$DEST_DIR"
+
+# --- User Info ---
+
+if [ -z "$GIT_AUTHOR_EMAIL" ]; then
+    read -p "Welld username?: " USERNAME < /dev/tty
+else
+    USERNAME="${GIT_AUTHOR_EMAIL%@*}"
+fi
+
+CN="${USERNAME}-${CA_ENV}-${CA_TYPE}"
+
+KEY_FILE="${CA_ENV}-${CA_TYPE}.key"
+CSR_FILE="${CA_ENV}-${CA_TYPE}.csr"
+CERT_FILE="${CA_ENV}-${CA_TYPE}.crt"
+OUTPUT_FILE="${CA_ENV}-${CA_TYPE}.p12"
+
+# --- Certificate Logic ---
+
+setup_passphrase_fds
+
+echo "Generating a new encrypted private key..."
+openssl genrsa -aes256 -passout fd:3 -out "$KEY_FILE" 2048
+
+echo "Generating CSR..."
+openssl req -new -key "$KEY_FILE" -passin fd:4 -out "$CSR_FILE" -subj "/C=US/O=Welld Health/OU=${CA_TYPE}/CN=${CN}"
+
+CSR_BASE64=$(openssl base64 -A -in "$CSR_FILE")
+
+echo ""
+echo "Use this hidden command in #devops to get your signed certificate:"
+echo "/$BOT_ALIAS sign $CA_TYPE $CSR_BASE64"
+echo
+
+echo "Press <enter> when you are ready to paste your signed certificate..."
+read -r < /dev/tty
+
+echo "Please paste your signed certificate below (including BEGIN/END lines), then press <enter>"
+CERT_TEXT=""
+LINE_COUNT=0
+MAX_LINES=42
+MAX_LINE_LENGTH=140
+
+while true; do
+    # Read from /dev/tty to allow piping the script itself
+    if ! read -r -t 10 LINE < /dev/tty; then
+        error_exit "Timeout or error reading the certificate."
+    fi
+
+    if [ ${#LINE} -gt $MAX_LINE_LENGTH ]; then
+        error_exit "Line length exceeds limit."
+    fi
+
+    CERT_TEXT+="$LINE"$'\n'
+    LINE_COUNT=$(($LINE_COUNT + 1))
+
+    if [ $LINE_COUNT -gt $MAX_LINES ]; then
+        error_exit "Too many lines."
+    fi
+
+    if [[ "$LINE" == "-----END CERTIFICATE-----" ]]; then
+        break
+    fi
+done
+
+echo "$CERT_TEXT" > "$CERT_FILE"
+
+echo "Creating browser PKCS#12 file '${OUTPUT_FILE}'..."
+openssl pkcs12 -export -inkey "$KEY_FILE" \
+  -in "$CERT_FILE" -out "$OUTPUT_FILE" \
+  -macalg sha256 \
+  -certpbe PBE-SHA1-3DES \
+  -keypbe PBE-SHA1-3DES \
+  -maciter \
+  -passin fd:5 -passout fd:6
+
+echo "Process completed successfully."
+echo "Location: $DEST_DIR/$OUTPUT_FILE"
+
+exit 0
