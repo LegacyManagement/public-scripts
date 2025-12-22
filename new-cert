@@ -77,10 +77,13 @@ fi
 
 DIR_NAME="${CA_ENV}-${CA_TYPE}-certs"
 
+# Detect parent directory
 if [ -d "/app/app" ]; then
     PARENT_DIR="/app/certs"
-else
+elif [ -d "$HOME/workspace" ]; then
     PARENT_DIR="$HOME/workspace/certs"
+else
+    PARENT_DIR="$HOME/certs"
 fi
 
 DEST_DIR="${PARENT_DIR}/${DIR_NAME}"
