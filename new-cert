@@ -144,36 +144,50 @@ echo "Use this hidden command in #devops to get your signed certificate:"
 echo "/$BOT_ALIAS sign $CA_TYPE $CSR_BASE64"
 echo
 
-echo "Press <enter> when you are ready to paste your signed certificate..."
-read -r < /dev/tty
+echo "Please paste your signed certificate below (including BEGIN/END lines):"
 
-echo "Please paste your signed certificate below (including BEGIN/END lines), then press <enter>"
 CERT_TEXT=""
 LINE_COUNT=0
 MAX_LINES=42
-MAX_LINE_LENGTH=140
 
-while true; do
-    # Read from /dev/tty to allow piping the script itself
-    if ! read -r -t 10 LINE < /dev/tty; then
-        error_exit "Timeout or error reading the certificate."
+# 1. Wait for the first line (Long timeout: 280s)
+if ! read -r -t 280 LINE < /dev/tty; then
+    error_exit "Timed out waiting for certificate paste."
+fi
+
+if [[ "$LINE" != *"-----BEGIN CERTIFICATE-----"* ]]; then
+    error_exit "Invalid input. Expected '-----BEGIN CERTIFICATE-----' line."
+fi
+
+CERT_TEXT+="$LINE"$'\n'
+LINE_COUNT=1
+
+# 2. Slurp the rest (Short timeout: 2s)
+while [ $LINE_COUNT -lt $MAX_LINES ]; do
+    # Short timeout because a paste happens in one quick burst
+    if ! read -r -t 2 NEXT_LINE < /dev/tty; then
+        # If we timeout, the paste is likely "done"
+        break
     fi
 
-    if [ ${#LINE} -gt $MAX_LINE_LENGTH ]; then
-        error_exit "Line length exceeds limit."
-    fi
+    CERT_TEXT+="$NEXT_LINE"$'\n'
+    LINE_COUNT=$((LINE_COUNT + 1))
 
-    CERT_TEXT+="$LINE"$'\n'
-    LINE_COUNT=$(($LINE_COUNT + 1))
-
-    if [ $LINE_COUNT -gt $MAX_LINES ]; then
-        error_exit "Too many lines."
-    fi
-
-    if [[ "$LINE" == "-----END CERTIFICATE-----" ]]; then
+    if [[ "$NEXT_LINE" == *"-----END CERTIFICATE-----"* ]]; then
+        HAS_END_TAG=true
         break
     fi
 done
+
+# 3. Validation & Repair
+if [[ "$HAS_END_TAG" != true ]]; then
+    CERT_TEXT+=$'\n'"-----END CERTIFICATE-----"$'\n'
+fi
+
+# Use OpenSSL to check if the result is actually a valid cert
+if ! echo "$CERT_TEXT" | openssl x509 -text -noout > /dev/null 2>&1; then
+    error_exit "The pasted text does not appear to be a valid certificate."
+fi
 
 echo "$CERT_TEXT" > "$CERT_FILE"
 
