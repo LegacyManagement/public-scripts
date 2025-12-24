@@ -149,45 +149,70 @@ echo "Please paste your signed certificate below (including BEGIN/END lines):"
 CERT_TEXT=""
 LINE_COUNT=0
 MAX_LINES=42
+HAS_END_TAG=false
 
-# 1. Wait for the first line (Long timeout: 280s)
-if ! read -r -t 280 LINE < /dev/tty; then
-    error_exit "Timed out waiting for certificate paste."
-fi
+BEGIN_LINE="-----BEGIN CERTIFICATE-----"
+END_LINE="-----END CERTIFICATE-----"
 
-if [[ "$LINE" != *"-----BEGIN CERTIFICATE-----"* ]]; then
-    error_exit "Invalid input. Expected '-----BEGIN CERTIFICATE-----' line."
-fi
+# Read first meaningful line; allow a second attempt if it isn't BEGIN
+attempt=1
+while true; do
+    # Longer timeout for the initial paste/interaction
+    if ! read -r -t 280 LINE < /dev/tty; then
+        error_exit "Timed out waiting for certificate paste."
+    fi
 
-CERT_TEXT+="$LINE"$'\n'
-LINE_COUNT=1
+    # Ignore leading blank lines
+    if [[ -z "$LINE" ]]; then
+        continue
+    fi
 
-# 2. Slurp the rest (Short timeout: 2s)
-while [ $LINE_COUNT -lt $MAX_LINES ]; do
-    # Short timeout because a paste happens in one quick burst
+    if [[ "$LINE" == *"$BEGIN_LINE"* ]]; then
+        CERT_TEXT+="$BEGIN_LINE"$'\n'
+        LINE_COUNT=1
+        break
+    fi
+
+    if (( attempt >= 2 )); then
+        error_exit "Invalid input. Expected '$BEGIN_LINE' as the first non-empty line."
+    fi
+
+    echo
+    echo "That didn't look like a certificate begin line."
+    echo "Try again: paste the certificate starting with '$BEGIN_LINE'"
+    echo
+    attempt=$((attempt + 1))
+    CERT_TEXT=""
+    LINE_COUNT=0
+done
+
+# Slurp the rest: short timeout because paste should be a burst
+while (( LINE_COUNT < MAX_LINES )); do
     if ! read -r -t 2 NEXT_LINE < /dev/tty; then
-        # If we timeout, the paste is likely "done"
+        # Paste likely finished (or user didn't hit Enter at the end)
         break
     fi
 
     CERT_TEXT+="$NEXT_LINE"$'\n'
     LINE_COUNT=$((LINE_COUNT + 1))
 
-    if [[ "$NEXT_LINE" == *"-----END CERTIFICATE-----"* ]]; then
+    if [[ "$NEXT_LINE" == *"$END_LINE"* ]]; then
         HAS_END_TAG=true
         break
     fi
 done
 
-# 3. Validation & Repair
+# If END didn't arrive (common when no final newline), append it
 if [[ "$HAS_END_TAG" != true ]]; then
-    CERT_TEXT+=$'\n'"-----END CERTIFICATE-----"$'\n'
+    CERT_TEXT+="$END_LINE"$'\n'
 fi
 
-# Use OpenSSL to check if the result is actually a valid cert
-if ! echo "$CERT_TEXT" | openssl x509 -text -noout > /dev/null 2>&1; then
-    error_exit "The pasted text does not appear to be a valid certificate."
+# Validate
+if ! printf "%s" "$CERT_TEXT" | openssl x509 -text -noout >/dev/null 2>&1; then
+    error_exit "The pasted text does not appear to be a valid certificate. Make sure you copied the full block including BEGIN/END lines."
 fi
+
+printf "%s" "$CERT_TEXT" > "$CERT_FILE"
 
 echo "$CERT_TEXT" > "$CERT_FILE"
 
