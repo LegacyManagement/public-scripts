@@ -68,9 +68,9 @@ if [[ "$CA_TYPE" != "high" ]] && [[ "$CA_TYPE" != "low" ]]; then
     error_exit "Invalid type. Must be 'high' or 'low'."
 fi
 
-BOT_ALIAS=";"
+BOT_ALIAS="astro"
 if [[ $CA_ENV = "prod" ]]; then
-    BOT_ALIAS="!"
+    BOT_ALIAS="alita"
 fi
 
 # --- Path and Directory Setup ---
